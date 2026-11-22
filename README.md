@@ -109,15 +109,15 @@ adb pull /sdcard/boot_b.img boot/boot_b.img
 
 | 层次 | 是否通用 | 说明 |
 |---|---|---|
-| 内核源码树 `android_kernel_oneplus_sm8350` | ✅ 全系通用 | LE2120/21/23/25/27 同为 sm8350/lahaina，一加只维护一份源码（OOS14 与国行 ColorOS 14 同属 `oneplus/sm8350_u_14.0.0_oneplus9` 分支） |
-| 编译产物 `Image`（内核二进制） | ✅ 同 KMI 通用 | Droidspaces 全是 `.config` 编译期开关，编进 `Image` 后与 ROM 无关；只要目标系统同为 `android12-5.4` / `5.4.254-qgki`，可直接复用，无需重新编译 |
-| 完整 `boot.img` | ❌ 不通用 | = kernel + ramdisk + dtbo + AVB 签名链，后三项由具体 ROM / 区域绑定 |
+| 内核源码树 `android_kernel_oneplus_sm8350` | 全系通用 | LE2120/21/23/25/27 同为 sm8350/lahaina，一加只维护一份源码（OOS14 与国行 ColorOS 14 同属 `oneplus/sm8350_u_14.0.0_oneplus9` 分支） |
+| 编译产物 `Image`（内核二进制） | 同 KMI 通用 | Droidspaces 全是 `.config` 编译期开关，编进 `Image` 后与 ROM 无关；只要目标系统同为 `android12-5.4` / `5.4.254-qgki`，可直接复用，无需重新编译 |
+| 完整 `boot.img` | 不通用 | = kernel + ramdisk + dtbo + AVB 签名链，后三项由具体 ROM / 区域绑定 |
 
 **核心判定**：Droidspaces 依赖的 SYSVIPC / POSIX_MQUEUE / PID_NS / IPC_NS / USER_NS /
 DEVTMPFS / OVERLAY_FS / netfilter / ipset / macvlan / cgroup2 等，全部是**编译进内核**的
 能力，不是开机时从 ROM 读取的配置。因此判定链只有一环：
 
-> **内核成功启动 ⇒ Droidspaces 能力恒在 ⇒ Droidspaces 可用**
+> **内核成功启动 => Droidspaces 能力恒在 => Droidspaces 可用**
 
 上层是 OxygenOS、ColorOS 还是第三方 ROM，不影响这一判定。
 
@@ -127,7 +127,7 @@ DEVTMPFS / OVERLAY_FS / netfilter / ipset / macvlan / cgroup2 等，全部是**�
 拆目标机**自己的**原厂 boot，保留其 ramdisk 与 dtbo，**只替换 kernel**。
 这样 ramdisk 天然与目标 ROM 匹配，不会串用本仓库基于 OOS14 打包的 `boot_new.img`。
 
-> ❌ 不要把 `boot_new.img`（或 OOS14 整包）直接刷到 ColorOS —— 它的 ramdisk 和签名链是 OOS 的。
+> 不要把 `boot_new.img`（或 OOS14 整包）直接刷到 ColorOS —— 它的 ramdisk 和签名链是 OOS 的。
 
 ### 三道门槛属于「能否开机」，不属于「Droidspaces 能否用」
 
