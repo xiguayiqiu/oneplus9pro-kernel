@@ -1,0 +1,13 @@
+# 编译产物(体积大,可重建)
+/out/
+/boot_new.img
+/build.log
+/build_driver.log
+*.pyc
+__pycache__/
+build_driver*.log
+
+# 原厂 boot 镜像(约 192MB,超过 GitHub 单文件 100MB 限制)
+# 需自行从设备提取并放到 boot/boot_b.img,详见 README「准备原厂 boot 镜像」
+/boot/*.img
+/boot/*.img.gz
