@@ -1,6 +1,11 @@
-# OnePlus 9 Pro (LE2121) Droidspaces 内核源码仓库
+# OnePlus 9 Pro Droidspaces 内核源码仓库
 
 自包含内核源码仓库：clone 后可**离线**编译出带 Droidspaces 完整内核能力的内核 `Image`。
+
+该内核镜像适用于 **OnePlus 9 Pro 全系机型**（LE2120 / LE2121 / LE2123 / LE2125 / LE2127，
+OxygenOS 与 ColorOS 均可），前提是目标系统同为 GKI `android12-5.4` / `5.4.254-qgki` KMI。
+Droidspaces 依赖的全部是编译期内核配置开关，编进 `Image` 后即与上层 ROM 无关——
+**只要内核能启动，Droidspaces 就能用**。详见「适用范围与跨 ROM 说明」。
 
 > **重要：本仓库不收录原厂 `boot.img`。**
 > 原厂 boot 镜像约 192MB，超过 GitHub 单文件 100MB 限制，因此已从版本库排除。
@@ -10,8 +15,9 @@
 
 ## 设备与目标
 
-- 设备：OnePlus 9 Pro 印度版 **LE2121**（骁龙 888 / lahaina / sm8350）
-- 系统：Oxygen OS 14（UKQ1.230924.001）
+- 设备：OnePlus 9 Pro 全系（骁龙 888 / lahaina / sm8350）；**LE2121 印度版为编译与实机验证基准**，
+  编译产物 `Image` 亦可用于 LE2120/21/23/25/27 的同 KMI 系统（见「适用范围与跨 ROM 说明」）
+- 系统：Oxygen OS 14（UKQ1.230924.001，验证基准）
 - 内核：**5.4.254-qgki-gd2a1055adeb0**（KMI/GKI `android12-5.4`，简称 GKI-5.4.254）
 - 目标：在 Stock 内核基础上最小启用 Droidspaces 所需配置（容器/命名空间/cgroup/netfilter），
   保持 kABI 与厂商 vendor 模块 CRC 兼容，不关闭 SELinux。
@@ -97,6 +103,46 @@ adb pull /sdcard/boot_b.img boot/boot_b.img
 - 工具链：AOSP clang-r383902b1（LLVM 11.0.2），与设备内核编译工具链精确一致。
 - 遵循各自上游开源许可（GPL-2.0 等）；本仓库附加说明采用 GPL-3.0。
 
+## 适用范围与跨 ROM 说明
+
+「内核」需要分两层看，结论不同：
+
+| 层次 | 是否通用 | 说明 |
+|---|---|---|
+| 内核源码树 `android_kernel_oneplus_sm8350` | ✅ 全系通用 | LE2120/21/23/25/27 同为 sm8350/lahaina，一加只维护一份源码（OOS14 与国行 ColorOS 14 同属 `oneplus/sm8350_u_14.0.0_oneplus9` 分支） |
+| 编译产物 `Image`（内核二进制） | ✅ 同 KMI 通用 | Droidspaces 全是 `.config` 编译期开关，编进 `Image` 后与 ROM 无关；只要目标系统同为 `android12-5.4` / `5.4.254-qgki`，可直接复用，无需重新编译 |
+| 完整 `boot.img` | ❌ 不通用 | = kernel + ramdisk + dtbo + AVB 签名链，后三项由具体 ROM / 区域绑定 |
+
+**核心判定**：Droidspaces 依赖的 SYSVIPC / POSIX_MQUEUE / PID_NS / IPC_NS / USER_NS /
+DEVTMPFS / OVERLAY_FS / netfilter / ipset / macvlan / cgroup2 等，全部是**编译进内核**的
+能力，不是开机时从 ROM 读取的配置。因此判定链只有一环：
+
+> **内核成功启动 ⇒ Droidspaces 能力恒在 ⇒ Droidspaces 可用**
+
+上层是 OxygenOS、ColorOS 还是第三方 ROM，不影响这一判定。
+
+### 推荐刷法：只替换 kernel
+
+跨 ROM 使用请走「只刷内核」的方式（Kernel Flasher / AnyKernel3 / `scripts/repack_boot.py`）：
+拆目标机**自己的**原厂 boot，保留其 ramdisk 与 dtbo，**只替换 kernel**。
+这样 ramdisk 天然与目标 ROM 匹配，不会串用本仓库基于 OOS14 打包的 `boot_new.img`。
+
+> ❌ 不要把 `boot_new.img`（或 OOS14 整包）直接刷到 ColorOS —— 它的 ramdisk 和签名链是 OOS 的。
+
+### 三道门槛属于「能否开机」，不属于「Droidspaces 能否用」
+
+| 门槛 | 归属 | 处理 |
+|---|---|---|
+| ramdisk / dtbo | 能否开机 | 只换 kernel、保留目标机 ramdisk 即自动规避 |
+| vendor 模块 CRC | 能否开机 | 同 KMI 大概率一致（OOS14 实测 2075 符号 0 漂移）；跨 ROM 建议对目标 `vendor_dlkm` 重跑 `check_symvers_vs_device.py` |
+| AVB / vbmeta | 能否开机 | 需 `--disable-verity --disable-verification` 刷对应 vbmeta（chain descriptor 需 OEM 私钥） |
+
+万一卡在开机 logo，属上述签名链 / vendor 模块配合问题，**与 Droidspaces 能力无关**，
+换用目标 ROM 的 ramdisk 重打包并处理 vbmeta 即可。
+
+> 说明：跨 ROM 复用是基于同机型、同 KMI、同一源码分支的核对结论；
+> 本仓库的**实机验证仅在 LE2121 / OxygenOS 14 上完成**，ColorOS 尚未实机验证。
+
 ## 关键设计说明
 
 1. **config 基线**：编译用 `config/build.config`，它源自设备真实 `/proc/config.gz`，
@@ -106,8 +152,9 @@ adb pull /sdcard/boot_b.img boot/boot_b.img
    保证 WiFi/显示/触控等厂商模块可加载。校验：`python3 scripts/check_symvers_vs_device.py out/Module.symvers config/device_symbol_crcs.tsv`
 3. **AVB**：刷写 boot 分区需配合禁用 AVB 校验的 vbmeta（无 OEM 私钥无法重签），
    或使用 Kernel Flasher 的 AnyKernel3 包（自动 patch vbmeta）。临时验证用 `fastboot boot` 不涉及校验。
-4. **适用范围**：仅限 LE2121 Oxygen OS 14，**不可**用于国行 ColorOS（LE2120）或其他机型/ROM——
-   ramdisk、vendor 模块 CRC、AVB 密钥均与具体 ROM 深度绑定。
+4. **适用范围**：内核 `Image` 适用于 OnePlus 9 Pro 全系同 KMI 机型与 ROM；
+   完整 `boot.img` 的 ramdisk / vendor CRC / AVB 与具体 ROM 绑定，跨 ROM 需「只替换 kernel」重打包。
+   详见「适用范围与跨 ROM 说明」。
 
 ## 已验证状态（2026-11-22 实机）
 
