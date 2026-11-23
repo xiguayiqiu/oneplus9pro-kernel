@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # OnePlus 9 Pro (LE2121) Droidspaces 内核一键编译脚本
-# 用法: ./build.sh [--help | clean]
-#   无参数          编译内核并打包出 boot_new.img
+# 用法: ./build.sh [--help | clean | --quiet]
+#   无参数          编译内核并打包出 boot_new.img (默认实时显示 make 输出)
 #   --help, -h      显示帮助
 #   clean           清理编译产物 (out/、boot_new.img、build.log)
+#   --quiet, -q     不实时显示 make 输出 (仍完整写入 build.log)
 # 产出: out/arch/arm64/boot/Image  +  boot_new.img (可 fastboot flash 的 boot 镜像)
 set -uo pipefail
 
@@ -24,13 +25,22 @@ usage() {
 用法: ./build.sh [命令]
 
 命令:
-  (无参数)          编译内核并打包出 boot_new.img
+  (无参数)          编译内核并打包出 boot_new.img，实时显示 make 输出
   --help, -h, help  显示本帮助
   clean             清理编译产物 (out/、boot_new.img、build.log)，保留源码与工具链
+  --quiet, -q       不实时显示 make 输出，仅写入 build.log
 
 更多操作可用 make: make image / make kabi / make clean
 EOF
 }
+
+LIVE_LOG=1
+case "${1:-}" in
+  --quiet|-q)
+    LIVE_LOG=0
+    shift
+    ;;
+esac
 
 case "${1:-}" in
   --help|-h|help)
@@ -70,6 +80,23 @@ cd "$SRC" || exit 1
 
 # 步骤2: 编译 (参数与已验证成功的 build_kernel_v2.sh 完全一致,仅路径改为仓库内相对)
 echo "=== 编译 (make -j) ==="
+: > "$ROOT/build.log"
+TAIL_PID=""
+cleanup_tail() {
+    if [ -n "$TAIL_PID" ]; then
+        kill "$TAIL_PID" 2>/dev/null || true
+        wait "$TAIL_PID" 2>/dev/null || true
+        TAIL_PID=""
+    fi
+}
+trap cleanup_tail EXIT
+
+if [ "$LIVE_LOG" -eq 1 ]; then
+    echo "实时输出来自 $ROOT/build.log (Ctrl+C 可中断编译)"
+    tail -n +1 -f "$ROOT/build.log" &
+    TAIL_PID=$!
+fi
+
 env -u BASH_ENV -u 'BASH_FUNC_rm%%' -u 'BASH_FUNC_cp%%' -u 'BASH_FUNC_mv%%' \
     -u 'BASH_FUNC_ln%%' -u 'BASH_FUNC_mkdir%%' \
     PATH="$TC:$CL:/usr/bin:/bin" \
@@ -81,8 +108,9 @@ env -u BASH_ENV -u 'BASH_FUNC_rm%%' -u 'BASH_FUNC_cp%%' -u 'BASH_FUNC_mv%%' \
     AR="$CL/llvm-ar" NM="$CL/llvm-nm" \
     OBJCOPY="$CL/llvm-objcopy" OBJDUMP="$CL/llvm-objdump" \
     READELF="$CL/llvm-readelf" STRIP="$CL/llvm-strip" \
-    -j8 Image modules </dev/null >"$ROOT/build.log" 2>&1
+    -j8 Image modules </dev/null >>"$ROOT/build.log" 2>&1
 RC=$?
+cleanup_tail
 
 if [ ! -f "$OUT/arch/arm64/boot/Image" ] || [ ! -f "$OUT/Module.symvers" ]; then
     RC=1

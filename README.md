@@ -156,9 +156,42 @@ DEVTMPFS / OVERLAY_FS / netfilter / ipset / macvlan / cgroup2 等，全部是**�
    完整 `boot.img` 的 ramdisk / vendor CRC / AVB 与具体 ROM 绑定，跨 ROM 需「只替换 kernel」重打包。
    详见「适用范围与跨 ROM 说明」。
 
-## 已验证状态（2026-11-22 实机）
+## Root 方案与容器稳定性（实机对比）
+
+Root 注入层与 Droidspaces 内核能力是**互相独立的两层**：本仓库产出的 `Image` 已经包含
+Droidspaces 所需全部编译期配置，Root 方案只决定「如何取得 su」，不需要也不应该为此改动
+内核 config 或 kABI。
+
+### 实测结论（LE2121 / OOS14）
+
+| Root 方案 | 对内核 `Image` 的影响 | Droidspaces 容器运行表现 | 结论 |
+|---|---|---|---|
+| **Magisk** | 零改动，仅 patch boot 的 ramdisk | **最稳定**，实测容器各项功能正常 | **首选** |
+| APatch / KernelPatch | patch 内核 Image，需重新打包 boot | 可 root、可正常进系统；容器运行稳定性不如 Magisk | 备选 |
+| KernelSU-Next | 需将驱动编入内核并加 kABI guard | 5.4 上曾显示「未集成」，且维护成本最高 | 当前 `main` 分支未集成 |
+
+> 结论来自实机对三种 Root 方案的容器运行对比：**只有 Magisk 表现最稳定**。
+> 因此推荐用 Magisk 获得 Root，不要为了 Root 改动内核配置。
+
+### 推荐流程（Magisk）
+
+1. 先取得未 root 的 boot：直接 `./build.sh` 产出 `boot_new.img`，或跨 ROM 时按
+   「推荐刷法：只替换 kernel」为目标机自己的原厂 boot 重打包。
+2. 用 Magisk 对该 boot 做 patch，刷回对应 slot（`fastboot flash boot_a` / `boot_b`）。
+3. 保持已禁用校验的 vbmeta 状态（刷新 boot 不需要恢复 AVB；无 OEM 私钥也无法重签）。
+4. 开机后确认 `su`、`getenforce`（保持 Enforcing）、`uname -r` 及 Droidspaces Requirements。
+5. 以后每次重新编译内核，只需对新 boot 重新做一次 Magisk patch；内核 config 无需为 Root 调整。
+
+### 注意事项
+
+- 切换 Root 方案前先清掉旧方案（APatch 内核 patch / KSU 模块），避免两套 Root 冲突。
+- 容器网络只有 `127.0.0.1` 属于运行时 NAT 层问题，不是 Root 方案或内核配置缺项；
+  先确认 Droidspaces Net 模式为 `NAT`，再排查宿主 `ip_forward` 与 `iptables` MASQUERADE 规则。
+
+## 已验证状态（2026-11-22 ~ 11-23 实机）
 
 - 编译成功，uname = `5.4.254-qgki-gd2a1055adeb0`
 - kABI：module_layout 匹配，2075 符号 0 CRC 漂移
 - 真机启动：修补内核 + APatch root 正常进系统，SELinux Enforcing
 - Droidspaces 所需内核能力全部齐备（命名空间/IPC/cgroup/网络/overlayfs，命令 unshare/nsenter/ip）
+- Root 方案对比（11-23）：Magisk 的容器运行最稳定，作为推荐方案；APatch 可 root 但容器表现次之
